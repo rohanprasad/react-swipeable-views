@@ -20,20 +20,6 @@ function addEventListenerEnhanced(node, event, handler, options) {
   };
 }
 
-const styles = {
-  container: {
-    direction: 'ltr',
-    display: 'flex',
-    willChange: 'transform',
-  },
-  slide: {
-    width: '100%',
-    WebkitFlexShrink: 0,
-    flexShrink: 0,
-    overflow: 'auto',
-  },
-};
-
 const axisProperties = {
   root: {
     x: {
@@ -233,7 +219,19 @@ class SwipeableViews extends React.Component {
 
   constructor(props) {
     super(props);
-
+    this.styles = {
+      container: {
+        direction: 'ltr',
+        display: 'flex',
+        willChange: 'transform',
+      },
+      slide: {
+        width: props.itemWidth ? `${props.itemWidth}%` : '100%',
+        WebkitFlexShrink: 0,
+        flexShrink: 0,
+        overflow: 'auto',
+      },
+    };
     if (process.env.NODE_ENV !== 'production') {
       checkIndexBounds(props);
     }
@@ -331,6 +329,18 @@ class SwipeableViews extends React.Component {
     clearTimeout(this.firstRenderTimeout);
   }
 
+  calculateTransform() {
+    const { children, itemWidth } = this.props;
+    if (!itemWidth) {
+      return 100;
+    }
+
+    const transformOffset = this.indexCurrent * itemWidth - (100 - itemWidth) / 2;
+    const maxTransform = React.Children.count(this.props.children) * itemWidth - 100;
+    const minTransform = 0;
+    return Math.max(Math.min(transformOffset, maxTransform), minTransform);
+  }
+
   setIndexCurrent(indexCurrent) {
     if (!this.props.animateTransitions && this.indexCurrent !== indexCurrent) {
       this.handleTransitionEnd();
@@ -340,7 +350,7 @@ class SwipeableViews extends React.Component {
 
     if (this.containerNode) {
       const { axis } = this.props;
-      const transform = axisProperties.transform[axis](indexCurrent * 100);
+      const transform = axisProperties.transform[axis](this.calculateTransform());
       this.containerNode.style.WebkitTransform = transform;
       this.containerNode.style.transform = transform;
     }
@@ -360,11 +370,13 @@ class SwipeableViews extends React.Component {
   };
 
   handleSwipeStart = event => {
-    const { axis } = this.props;
+    const { axis, itemWidth } = this.props;
 
     const touch = applyRotationMatrix(event.touches[0], axis);
 
-    this.viewLength = this.rootNode.getBoundingClientRect()[axisProperties.length[axis]];
+    this.viewLength = itemWidth
+      ? (itemWidth / 100) * this.rootNode.getBoundingClientRect()[axisProperties.length[axis]]
+      : this.rootNode.getBoundingClientRect()[axisProperties.length[axis]];
     this.startX = touch.pageX;
     this.lastX = touch.pageX;
     this.vx = 0;
@@ -392,11 +404,13 @@ class SwipeableViews extends React.Component {
         axis,
       );
 
-      this.startIndex =
+      const computedIndex =
         -tranformNormalized.pageX /
           (this.viewLength -
             parseInt(rootStyle.paddingLeft, 10) -
             parseInt(rootStyle.paddingRight, 10)) || 0;
+
+      this.startIndex = itemWidth ? computedIndex / (itemWidth / 100) : computedIndex;
     }
   };
 
@@ -750,7 +764,7 @@ The custom height has a higher priority than the animateHeight property.
 So animateHeight is most likely having no effect at all.`,
     );
 
-    const slideStyle = Object.assign({}, styles.slide, slideStyleProp);
+    const slideStyle = Object.assign({}, this.styles.slide, slideStyleProp);
 
     let transition;
     let WebkitTransition;
@@ -779,7 +793,7 @@ So animateHeight is most likely having no effect at all.`,
 
     // Apply the styles for SSR considerations
     if (!renderOnlyActive) {
-      const transform = axisProperties.transform[axis](this.indexCurrent * 100);
+      const transform = axisProperties.transform[axis](this.calculateTransform());
       containerStyle.WebkitTransform = transform;
       containerStyle.transform = transform;
     }
@@ -799,7 +813,7 @@ So animateHeight is most likely having no effect at all.`,
       >
         <div
           ref={this.setContainerNode}
-          style={Object.assign({}, containerStyle, styles.container, containerStyleProp)}
+          style={Object.assign({}, containerStyle, this.styles.container, containerStyleProp)}
           className="react-swipeable-view-container"
         >
           {React.Children.map(children, (child, indexChild) => {
